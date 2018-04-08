@@ -1,0 +1,340 @@
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Request Bucket</title>
+  <link rel="icon" href="data:;base64,iVBORw0KGgo=">
+  <script
+    src="https://code.jquery.com/jquery-3.3.1.js"
+    integrity="sha256-2Kok7MbOyxpgUVvAk/HJ2jigOSYS2auK4Pfzbm7uH60="
+    crossorigin="anonymous"></script>
+  <link
+    href="https://stackpath.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css"
+    rel="stylesheet"
+    integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm"
+    crossorigin="anonymous">
+  <script
+    src="https://stackpath.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js"
+    integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+    crossorigin="anonymous"></script>
+  <script
+    src="https://cdnjs.cloudflare.com/ajax/libs/lodash.js/4.17.5/lodash.min.js"
+    integrity="sha256-YFhaeQSVBgAFNN5z4I9YRB2jCuqc2nvypz0Q2eQzcx8="
+    crossorigin="anonymous"></script>
+    
+  <style>
+    .navbar-dark .nav-info {
+      color: #fff;
+    }
+    .wide-container {
+      margin: 0 1rem;
+    }
+    .request {
+      padding: 0.5rem;
+      border: 1px solid black;
+      border-radius: 0.3rem;
+    }
+    .request-old {
+      opacity: 0.6;
+    }
+    .request-content {
+      display: flex;
+      flex-wrap: wrap;
+      flex-direction: row;
+      margin: 0 -0.5rem;
+    }
+
+    .cell {
+      margin: 0 0.5rem;
+    }
+    .cell-xs {
+      min-width: 1em;
+    }
+    .cell-sm {
+      min-width: 3em;
+    }
+    .cell-md {
+      min-width: 5em;
+    }
+    .cell-lg {
+      flex-grow: 1;
+      text-overflow: ellipsis;
+    }
+    .actionbar {
+      display: flex;
+      flex-wrap: wrap;
+      flex-direction: row-reverse;
+    }
+    .text-link:hover {
+      text-decoration: underline;
+    }
+    .text-link {
+      text-decoration: none;
+      color: #007bff!important;
+      cursor: pointer;
+    }
+    .btn-text {
+      background: none;
+      color: inherit;
+      border: none; 
+      padding: 0;
+    }
+    .details pre {
+      margin: 0;
+    }
+    
+    .color-0 { background: #eee; }
+    .color-1 { background: #aff; }
+    .color-2 { background: #faf; }
+    .color-3 { background: #ffa; }
+    .color-4 { background: #ccf; }
+    .color-5 { background: #cfc; }
+    .color-6 { background: #fcc; }
+    .color-7 { background: #ddd; }
+  </style>
+</head>
+<body>
+
+  <nav class="navbar navbar-dark bg-dark mb-2">
+    <span class="navbar-brand">Request Bucket</span>
+    <small class="nav-info">by @tamas_hegedus</small>
+  </nav>
+  <main class="wide-container">
+    <div id="infobar">
+      <div class="actionbar mb-3">
+        <button class="btn btn-danger btn-sm" onclick="do_clear(event)">Clear</button>
+      </div>
+      <div class="loader">Loading...</div>
+      <div id="alerts"></div>
+    </div>
+    <div id="request-list">
+    </div>
+  </main>
+
+  <script id="row-template" type="text/html">
+    <div class="request mb-2 color-{{colorCode}}" data-component="request">
+      <div class="request-content">
+        <div class="cell cell-xs">{{id}}</div>
+        <div class="cell cell-sm" data-component="elapsed" data-timestamp="{{timestamp}}">-</div>
+        <div class="cell cell-md">{{method}}</div>
+        <div class="cell cell-md">{{clientIp}}</div>
+        <div class="cell cell-md">{{protocol}}</div>
+        <div class="cell cell-lg">{{url}}</div>
+        <div class="cell cell-lg">{{body}}</div>
+        <div class="cell cell-xs">
+          <button type="button" class="btn-text text-link" data-toggle="collapse" data-target="#request-details-{{id}}">Details</button>
+        </div>
+      </div>
+      <div class="request-details collapse" id="request-details-{{id}}">
+        <div class="details mt-3"><pre><code>{{detailsText}}</code></pre></div>
+      </div>
+    </div>
+  </script>
+
+  <script id="alert-template" type="text/html">
+    <div class="alert alert-{{type}} alert-dismissible fade" role="alert">
+      <strong>{{title}}</strong> <span>{{message}}</span>
+      <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+        <span aria-hidden="true">&times;</span>
+      </button>
+    </div>
+  </script>
+
+  <script>
+    var minId, maxId;
+
+    function fetchRequests(firstId, lastId) {
+      return $.getJSON({
+        url: 'fetch',
+        data: {
+          first: firstId,
+          last: lastId,
+        }
+      }).then(rows => {
+        if (rows.error) {
+          console.error(rows.error);
+          showAlert({
+            message: rows.error,
+            type: 'danger',
+          });
+          return;
+        }
+        $("#infobar .loader").remove();
+        if (firstId !== undefined && rows.values.length) {
+          desktopNotify("New requests observed!");
+        }
+        _.sortBy(rows.values, 'id').forEach(row => {
+          updateIdRange(row.id);
+          const $row = renderRow(row);
+          $("#request-list").prepend($row);
+        });
+      }).catch(e => {
+        console.error(e);
+        showAlert({
+          message: "Couldn't fetch data",
+          type: 'danger',
+        });
+      });
+    }
+    
+    
+    var shownMsgSet = new Set();
+    function desktopNotify(msg) {
+      try {
+        if (!shownMsgSet.has(msg)) {
+          shownMsgSet.add(msg);
+          const noti = new Notification(msg, { body: "Click to open" });
+          noti.addEventListener('click', function(e) {
+            window.focus();
+            this.close();
+          });
+          noti.addEventListener('close', function(e) {
+            shownMsgSet.delete(msg);
+          });
+        }
+      } catch(e) {
+        console.error(e);
+      }
+    }
+    
+    function renderRow(row) {
+      return renderNode("row-template", Object.assign({
+        colorCode: getColorCode(row),
+        detailsText: formatDetails(row),
+      }, row));
+    }
+
+    function formatDetails(row) {
+      function beautifyHeader(header) {
+        return header.replace(/(?:^|\-)[a-zA-Z]/g, m => m.toUpperCase())
+      }
+      function formatHeaders(headers) {
+        return Object.entries(headers).map(([k,v]) => beautifyHeader(k) + ": " + v + "\n").join("")
+      }
+      return (row.method + " " + row.url + " HTTP/1.1\n"
+        + formatHeaders(row.headers)
+        + "\n"
+        + (row.body || "")
+      );
+    }
+    
+    function getColorCode(row) {
+      return getDistinctIndex(row.clientIp) % 8;
+    }
+
+    function showAlert(opts) {
+      if (opts.type  === undefined) opts.type = 'info';
+      if (opts.timeout === undefined) opts.timeout = opts.type === 'info' ? 3000 : undefined;
+      
+      const $alerts = $("#alerts");
+      removeOldAlerts($alerts);
+      const $alert = $(renderNode("alert-template", opts));
+      $alerts.append($alert);
+      $alert.alert();
+      setTimeout(function() {
+        $alert.addClass('show');
+      }, 1);
+      if (opts.timeout) {
+        setTimeout(function() {
+          $alert.alert('close');
+        }, opts.timeout);
+      }
+    }
+    function removeOldAlerts($alerts) {
+      const $alertList = $alerts.children();
+      for (var i = 0; i < $alertList.length - 2; i++) {
+        $alertList[i].remove();
+      }
+    }
+    function updateIdRange(newId) {
+      if (minId === undefined || minId > newId) minId = newId;
+      if (maxId === undefined || maxId < newId) maxId = newId;
+    }
+    $(function() {
+      fetchRequests().then(updateElapsed);
+      setInterval(function() {
+        updateRequests();
+        updateElapsed();
+      }, 3000);
+      if (Notification.permission === "default") {
+        Notification.requestPermission();
+      }
+    });
+    
+    
+    function renderTemplate(templateId, context) {
+      const template = document.getElementById(templateId).innerText || "";
+      function interpolate(match, group1) {
+        const value = context[group1];
+        if (value == null) return '';
+        return htmlEscape(""+value);
+      }
+      return template.replace(/\{\{(.*?)\}\}/g, interpolate);
+    }
+    
+    function renderNode(templateId, context) {
+      return $($.parseHTML(renderTemplate(templateId, context)).filter(n => n.nodeType !== 3));
+    }
+    function updateElapsed() {
+      $("[data-component='request']").each(function() {
+        const $request = $(this);
+        $request.find("[data-component='elapsed']").each(function() {
+          var timestamp = this.getAttribute('data-timestamp');
+          if (timestamp) {
+            var ageMsecs = Date.now() - new Date(timestamp).getTime();
+            if (ageMsecs > 1000 * 60 * 3) {
+              $request.addClass('request-old');
+            }
+            this.innerText = formatDuration(ageMsecs);
+          }
+        });
+      });
+    }
+    function updateRequests() {
+      fetchRequests(maxId);
+    }
+    function formatDuration(msecs) {
+      var secs = msecs / 1000;
+      if (secs < 60) return Math.round(secs) + "s";
+      if (secs < 3600) return Math.round(secs / 60) + "m";
+      return Math.round(secs / 3600) + "h";
+    }
+    function do_clear() {
+      $("#request-list").empty();
+      $.post({
+        url: 'clear',
+      }).then(() => {
+        showAlert({
+          message: "Successfully cleared",
+          type: "info", 
+          timeout: 3000,
+        });
+      }).catch(e => {
+        showAlert({
+          message: "Failed to clear",
+          type: "danger", 
+        });
+      });
+    }
+    
+    var _distinctIndex = new Map();
+    function getDistinctIndex(ip) {
+      var result = _distinctIndex.get(ip);
+      if (result === undefined) {
+        result = _distinctIndex.size;
+        _distinctIndex.set(ip, result);
+      }
+      return result;
+    }
+    
+    function htmlEscape(unsafe) {
+      return unsafe
+           .replace(/&/g, "&amp;")
+           .replace(/</g, "&lt;")
+           .replace(/>/g, "&gt;")
+           .replace(/"/g, "&quot;")
+           .replace(/'/g, "&#039;");
+    }
+  </script>
+</body>
+</html>
+
