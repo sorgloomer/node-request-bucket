@@ -125,7 +125,10 @@
         </div>
       </div>
       <div class="request-details collapse" id="request-details-{{id}}">
-        <div class="details mt-3"><pre><code>{{detailsText}}</code></pre></div>
+        <hr class="mt-3">
+        <div class="details"><pre><code>{{queryText}}</code></pre></div>
+        <hr class="mt-3">
+        <div class="details"><pre><code>{{detailsText}}</code></pre></div>
       </div>
     </div>
   </script>
@@ -200,7 +203,26 @@
       return renderNode("row-template", Object.assign({
         colorCode: getColorCode(row),
         detailsText: formatDetails(row),
+        queryText: formatQuery(row),
       }, row));
+    }
+
+    function formatQuery(row) {
+      const m = /^(.*?)(?:\?(.*?))?(?:\#(.*?))?$/.exec(row.url);
+      const qs = m[2];
+      if (!qs) return "";
+      return qs.split("&").filter(x => x).map(param => {
+        const m = /^(.*?)(?:\=(.*))?$/.exec(param);
+        var k = m[1];
+        var v = m[2] || "";
+        try {
+          k = decodeURIComponent(k);
+          v = decodeURIComponent(v);
+        } catch (e) {
+          console.warn("Could not urldecde " + param);
+        }
+        return k + " = " + v;
+      }).join("\n");
     }
 
     function formatDetails(row) {
