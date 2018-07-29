@@ -1,0 +1,4 @@
+{
+  "admin": "/admin",
+  "db": ":memory:"
+}
